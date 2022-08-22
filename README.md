@@ -1,5 +1,7 @@
 # java-nio
 
+Follow the link to find [Presentation](https://www.youtube.com/watch?v=Qm9hhPFelvg&ab_channel=IntelliasInside "Presentation")
+
 There are 3 examples using Java Nio library:
 
 ## 1. Simple Echo server implementation app/src/main/java/com/nio/EchoServer.java
