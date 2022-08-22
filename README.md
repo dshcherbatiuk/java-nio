@@ -18,6 +18,10 @@ There are 3 examples using Java Nio library:
   3. Connect to the data channel **nc -v 0.0.0.0 5555**
   4. Connect to the control channel **nc -v 0.0.0.0 4444**
   
+  The idea of the project to show how we can manipulate with TCP Flow Control using Java Nio. 
+  There **data** and **control** channels. The data channel receive inbound data and convert it to UPPERCASE (just for fun). The control channel has 2 commands **sopt-read** and **start-read** data to manipulate with data in the data channel.
+  When we send stop-read command to the control channel the data channel will stop receive inbound data. In such case we can get TCP Window Size to 0. To start read data again we need to send start-read command and after that all data are contained to the queue will be received by the data channel.
+  
 ## References
 ### Basic
 1. [ITT 2015 - Heinz Kabutz - The Multi-threading, Non Blocking IO](https://www.youtube.com/watch?v=uKc0Gx_lPsg&ab_channel=IstanbulTechTalks "ITT 2015 - Heinz Kabutz - The Multi-threading, Non Blocking IO")
