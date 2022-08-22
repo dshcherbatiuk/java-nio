@@ -1,0 +1,1 @@
+tcpdump -i any -s3000 -w - not port 11111 | nc -l -p 11111

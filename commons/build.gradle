@@ -1,0 +1,9 @@
+plugins {
+    id 'com.interview.java-common-conventions'
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+dependencies {
+}
