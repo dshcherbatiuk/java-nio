@@ -38,3 +38,8 @@ There are 3 examples using Java Nio library:
 8. [Java NIO - Reactor](https://github.com/kasun04/nio-reactor "Java NIO - Reactor")
 9. [SSL Introduction with Sample Transaction and Packet Exchange](https://www.cisco.com/c/en/us/support/docs/security-vpn/secure-socket-layer-ssl/116181-technote-product-00.html "SSL Introduction with Sample Transaction and Packet Exchange")
 10. [Java SSLEngine](https://docs.oracle.com/javase/8/docs/technotes/guides/security/jsse/samples/sslengine/SSLEngineSimpleDemo.java "Java SSLEngine")
+11. [Performance and scalability analysis of
+Java IO and NIO based server models,
+their implementation and comparison](https://s3-eu-central-1.amazonaws.com/ucu.edu.ua/wp-content/uploads/sites/8/2019/12/Petro-Karabyn.pdf "Performance and scalability analysis of
+Java IO and NIO based server models,
+their implementation and comparison")
