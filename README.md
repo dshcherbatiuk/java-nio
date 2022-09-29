@@ -2,6 +2,8 @@
 
 Follow the link to find [Presentation](https://www.youtube.com/watch?v=Qm9hhPFelvg&ab_channel=IntelliasInside "Presentation")
 
+Follow the link to find [Javeloper Presentation](https://www.youtube.com/watch?v=gS2rSsw6DZ4&ab_channel=KonferencjaOnline-Canal3 "Javeloper Presentation")
+
 There are 3 examples using Java Nio library:
 
 ## 1. Simple Echo server implementation app/src/main/java/com/nio/EchoServer.java
