@@ -1,13 +1,9 @@
 package com.nio;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
-
-import java.net.InetSocketAddress;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -15,103 +11,95 @@ import java.util.Iterator;
 
 public final class TcpDataFlowExample {
 
-	public static final String HOSTNAME = "0.0.0.0";
-	public static final int[] PORTS = new int[] { 5555, 4444 };
+    public static final String HOSTNAME = "0.0.0.0";
+    private static final int byteBufferCapacity = 65535;
+    private final String hostName;
+    private final int controlPort;
+    private final int dataPort;
+    private final int[] ports;
+    private Selector selector;
+    private ByteBuffer buffer;
+    private ClientHelper clientHelper;
 
-	private TcpDataFlowExample() {
-	}
+    private TcpDataFlowExample(String hostName, int controlPort, int dataPort) {
+        this.hostName = hostName;
+        this.controlPort = controlPort;
+        this.dataPort = dataPort;
+        this.ports = new int[]{controlPort, dataPort};
+    }
 
-	public static void main(final String... args) throws Exception {
-		System.out.printf("Tcp Data Flow Example started at %s:%s%n", HOSTNAME, Arrays.toString(PORTS));
-		final Selector selector = Selector.open();
+    public static void main(final String... args) throws Exception {
+        new TcpDataFlowExample(HOSTNAME, 5555, 4444).startEvents();
+    }
 
-		for (final int port : PORTS) {
-			final ServerSocketChannel serverSocket = ServerSocketChannel.open();
-			serverSocket.bind(new InetSocketAddress(HOSTNAME, port));
-			serverSocket.configureBlocking(false);
-			serverSocket.register(selector, SelectionKey.OP_ACCEPT);
-		}
+    public void startEvents() throws IOException {
+        System.out.printf("Tcp Data Flow Example started at %s:%s%n", hostName, Arrays.toString(ports));
+        selector = Selector.open();
+        clientHelper = new ClientHelper(selector);
+        buffer = ByteBuffer.allocate(byteBufferCapacity);
+        registerPorts();
 
-		final ByteBuffer buffer = ByteBuffer.allocate(65535);
-		final Multimap<Integer, SocketChannel> clients = ArrayListMultimap.create();
+        while (!Thread.currentThread().isInterrupted()) {
+            processNewEvents();
+        }
+    }
 
-		while (!Thread.currentThread().isInterrupted()) {
-			System.out.printf("Wait new events..%n");
-			selector.select();
+    private void processNewEvents() throws IOException {
+        System.out.printf("Wait new events..%n");
+        selector.select();
+        Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
 
-			final Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-			iterator.forEachRemaining(selectionKey -> {
-				try {
-					if (selectionKey.isAcceptable()) {
-						System.out.println("Handle READ event");
-						final ServerSocketChannel server = ((ServerSocketChannel) selectionKey.channel());
-						final SocketChannel client = server.accept();
-						client.configureBlocking(false);
-						System.out.printf("New connection accepted: %s%n", client);
+        iterator.forEachRemaining(selectionKey -> {
+            try {
+                if (selectionKey.isAcceptable()) {
+                    clientHelper.registerClient(selectionKey);
+                }
+                if (selectionKey.isReadable()) {
+                    if (handleReadEvent(selectionKey)) return;
+                }
+                iterator.remove();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
 
-						clients.put(server.socket().getLocalPort(), client);
+    private boolean handleReadEvent(SelectionKey selectionKey) throws IOException {
+        System.out.println("Handle READ event");
+        final SocketChannelWrapper client = new CustomSocketChannel((SocketChannel) selectionKey.channel());
 
-						client.register(selector, SelectionKey.OP_READ);
-					}
+        if (client.read(buffer) == -1) {
+            client.closeChannel(selector);
+            return true;
+        }
 
-					if (selectionKey.isReadable()) {
-						System.out.println("Handle READ event");
-						final SocketChannel client = (SocketChannel) selectionKey.channel();
-						final int read = client.read(buffer);
+        buffer.flip();
+        int localPort = client.getLocalPort();
 
-						if (read == -1) {
-							client.close();
-							client.keyFor(selector).cancel();
-							System.out.printf("The connection was closed: %s%n", client);
-							return;
-						}
+        if (controlPort == localPort) {
+            writeToBuffer();
+            client.write(buffer);
+        } else if (dataPort == localPort) {
+            clientHelper.registerEvents(client, getCommand(), controlPort);
+        }
+        buffer.clear();
+        return false;
+    }
 
-						buffer.flip();
-						switch (client.socket().getLocalPort()) {
-						case 5555:
-							for (int i = 0; i < buffer.limit(); i++) {
-								buffer.put(i, (byte) Character.toUpperCase(buffer.get(i)));
-							}
-							client.write(buffer);
-							break;
-						case 4444:
-							final String command = StandardCharsets.UTF_8.decode(buffer).toString();
-							final String stopCommand = "stop-read";
-							if (stopCommand.equals(command.trim().toLowerCase())) {
-								System.out.println("Handle stop-read");
-								registerEvent(selector, clients, 0);
-								break;
-							}
-							final String startCommand = "start-read";
-							if (startCommand.equals(command.trim().toLowerCase())) {
-								System.out.println("Handle start-read");
-								registerEvent(selector, clients, SelectionKey.OP_READ);
-								break;
-							}
+    private String getCommand() {
+        return StandardCharsets.UTF_8.decode(buffer).toString().trim().toLowerCase();
+    }
 
-							final byte[] unknownCommand = String.format("Supported commands:%n%s%n%s%n", stopCommand, startCommand)
-									.getBytes(StandardCharsets.UTF_8);
-							client.write(ByteBuffer.wrap(unknownCommand));
-							break;
-						}
+    private void registerPorts() throws IOException {
+        for (final int port : ports) {
+            clientHelper.registerPort(hostName, port);
+        }
+    }
 
-						buffer.clear();
-					}
-					iterator.remove();
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			});
-		}
-	}
+    private void writeToBuffer() {
+        for (int i = 0; i < buffer.limit(); i++) {
+            buffer.put(i, (byte) Character.toUpperCase(buffer.get(i)));
+        }
+    }
 
-	private static void registerEvent(final Selector selector, final Multimap<Integer, SocketChannel> clients, final int op) {
-		clients.get(5555).forEach(c -> {
-			try {
-				c.register(selector, op);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		});
-	}
 }
