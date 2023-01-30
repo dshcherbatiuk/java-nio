@@ -10,7 +10,7 @@ public enum ChannelCommand {
   START("start-read"),
   STOP("stop-read");
 
-  private static final Map<String, ChannelCommand> POLICY_STATUS_TYPES = Arrays.stream(ChannelCommand.values())
+  private static final Map<String, ChannelCommand> COMMAND_TYPES = Arrays.stream(ChannelCommand.values())
       .collect(Collectors.toMap(ChannelCommand::getValue, Function.identity()));
 
   private String value;
@@ -24,7 +24,7 @@ public enum ChannelCommand {
   }
 
   public static ChannelCommand fromValue(String value) {
-    return POLICY_STATUS_TYPES.get(value);
+    return COMMAND_TYPES.get(value);
   }
 
 }
