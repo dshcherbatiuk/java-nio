@@ -1,117 +1,108 @@
 package com.nio;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
-
-import java.net.InetSocketAddress;
+import com.nio.tcp.ChannelHandler;
+import com.nio.tcp.channel.NioServerSocketChannel;
+import com.nio.tcp.impl.CommandChannelHandler;
+import com.nio.tcp.impl.ReadChannelHandler;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Set;
+import java.util.logging.Logger;
 
 public final class TcpDataFlowExample {
 
-	public static final String HOSTNAME = "0.0.0.0";
-	public static final int[] PORTS = new int[] { 5555, 4444 };
+  private static final Logger LOGGER = Logger.getLogger(TcpDataFlowExample.class.getName());
 
-	private TcpDataFlowExample() {
-	}
+  private final Selector selector;
 
-	public static void main(final String... args) throws Exception {
-		System.out.printf("Tcp Data Flow Example started at %s:%s%n", HOSTNAME, Arrays.toString(PORTS));
-		final Selector selector = Selector.open();
+  public TcpDataFlowExample() throws IOException {
+    this.selector = Selector.open();
+  }
 
-		for (final int port : PORTS) {
-			final ServerSocketChannel serverSocket = ServerSocketChannel.open();
-			serverSocket.bind(new InetSocketAddress(HOSTNAME, port));
-			serverSocket.configureBlocking(false);
-			serverSocket.register(selector, SelectionKey.OP_ACCEPT);
-		}
+  public static void main(final String... args) throws Exception {
+    TcpDataFlowExample tcpDataFlowExample = new TcpDataFlowExample();
+    tcpDataFlowExample.start();
+  }
 
-		final ByteBuffer buffer = ByteBuffer.allocate(65535);
-		final Multimap<Integer, SocketChannel> clients = ArrayListMultimap.create();
+  public void start() throws IOException {
+    ReadChannelHandler readChannelHandler = new ReadChannelHandler();
+    CommandChannelHandler commandChannelHandler = new CommandChannelHandler();
+    this.registerChannel(tcpChannel(5555, readChannelHandler))
+        .registerChannel(tcpChannel(4444, commandChannelHandler));
+    try {
+      LOGGER.info("Tcp Data Flow Example started ");
+      processEvents();
+    } catch (IOException e) {
+      LOGGER.info("exception in event loop");
+    }
+  }
 
-		while (!Thread.currentThread().isInterrupted()) {
-			System.out.printf("Wait new events..%n");
-			selector.select();
+  private void processEvents() throws IOException {
+    while (!Thread.interrupted()) {
+      LOGGER.info("Wait new events..");
+      selector.select();
+      Set<SelectionKey> keys = selector.selectedKeys();
+      Iterator<SelectionKey> iterator = keys.iterator();
+      while (iterator.hasNext()) {
+        SelectionKey key = iterator.next();
+        if (!key.isValid()) {
+          iterator.remove();
+          continue;
+        }
+        processKey(key);
+      }
+      keys.clear();
+    }
+  }
 
-			final Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
-			iterator.forEachRemaining(selectionKey -> {
-				try {
-					if (selectionKey.isAcceptable()) {
-						System.out.println("Handle READ event");
-						final ServerSocketChannel server = ((ServerSocketChannel) selectionKey.channel());
-						final SocketChannel client = server.accept();
-						client.configureBlocking(false);
-						System.out.printf("New connection accepted: %s%n", client);
+  private void processKey(SelectionKey key) throws IOException {
+    if (key.isAcceptable()) {
+      onChannelAcceptable(key);
+    } else if (key.isReadable()) {
+      onChannelReadable(key);
+    }
+  }
 
-						clients.put(server.socket().getLocalPort(), client);
+  private void onChannelAcceptable(SelectionKey key) throws IOException {
+    ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
+    SocketChannel socketChannel = serverSocketChannel.accept();
+    socketChannel.configureBlocking(false);
+    LOGGER.info(String.format("New connection accepted: %s%n", socketChannel));
+    SelectionKey readKey = socketChannel.register(selector, SelectionKey.OP_READ);
+    readKey.attach(key.attachment());
+  }
 
-						client.register(selector, SelectionKey.OP_READ);
-					}
+  private void onChannelReadable(SelectionKey key) {
+    try {
+      NioServerSocketChannel channel = (NioServerSocketChannel) key.attachment();
+      ByteBuffer readObject = channel.read(key, selector);
+      channel.getHandler().handleChannelRead(readObject, key, selector);
+      readObject.clear();
+    } catch (IOException e) {
+      try {
+        key.channel().close();
+      } catch (IOException e1) {
+        LOGGER.info("error closing channel");
+      }
+    }
+  }
 
-					if (selectionKey.isReadable()) {
-						System.out.println("Handle READ event");
-						final SocketChannel client = (SocketChannel) selectionKey.channel();
-						final int read = client.read(buffer);
+  public TcpDataFlowExample registerChannel(NioServerSocketChannel channel) throws IOException {
+    SelectionKey key = channel.getSelectableChannel().register(selector, SelectionKey.OP_ACCEPT);
+    key.attach(channel);
+    return this;
+  }
 
-						if (read == -1) {
-							client.close();
-							client.keyFor(selector).cancel();
-							System.out.printf("The connection was closed: %s%n", client);
-							return;
-						}
 
-						buffer.flip();
-						switch (client.socket().getLocalPort()) {
-						case 5555:
-							for (int i = 0; i < buffer.limit(); i++) {
-								buffer.put(i, (byte) Character.toUpperCase(buffer.get(i)));
-							}
-							client.write(buffer);
-							break;
-						case 4444:
-							final String command = StandardCharsets.UTF_8.decode(buffer).toString();
-							final String stopCommand = "stop-read";
-							if (stopCommand.equals(command.trim().toLowerCase())) {
-								System.out.println("Handle stop-read");
-								registerEvent(selector, clients, 0);
-								break;
-							}
-							final String startCommand = "start-read";
-							if (startCommand.equals(command.trim().toLowerCase())) {
-								System.out.println("Handle start-read");
-								registerEvent(selector, clients, SelectionKey.OP_READ);
-								break;
-							}
+  private NioServerSocketChannel tcpChannel(int port, ChannelHandler handler) throws IOException {
+    NioServerSocketChannel channel = new NioServerSocketChannel(port, handler);
+    channel.bind();
+    return channel;
+  }
 
-							final byte[] unknownCommand = String.format("Supported commands:%n%s%n%s%n", stopCommand, startCommand)
-									.getBytes(StandardCharsets.UTF_8);
-							client.write(ByteBuffer.wrap(unknownCommand));
-							break;
-						}
-
-						buffer.clear();
-					}
-					iterator.remove();
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			});
-		}
-	}
-
-	private static void registerEvent(final Selector selector, final Multimap<Integer, SocketChannel> clients, final int op) {
-		clients.get(5555).forEach(c -> {
-			try {
-				c.register(selector, op);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		});
-	}
 }
