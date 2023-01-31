@@ -15,23 +15,23 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.logging.Logger;
 
-public class EventServiceImpl implements EventService {
+public class ChannelServiceImpl implements ChannelService {
 
-  private static final Logger LOG = Logger.getLogger(EventServiceImpl.class.getName());
+  private static final Logger LOG = Logger.getLogger(ChannelServiceImpl.class.getName());
   private static final int BUFFER_CAPACITY = 65535;
 
   private final Selector selector;
   private final ByteBuffer buffer;
   private final Multimap<Integer, SocketChannel> clients;
 
-  public EventServiceImpl(Selector selector) {
+  public ChannelServiceImpl(Selector selector) {
     this.selector = selector;
     this.buffer = ByteBuffer.allocate(BUFFER_CAPACITY);
     this.clients = ArrayListMultimap.create();
   }
 
   @Override
-  public void acceptEvent(ServerSocketChannel channel) throws IOException {
+  public void acceptChannel(ServerSocketChannel channel) throws IOException {
     final SocketChannel client = channel.accept();
     client.configureBlocking(false);
     LOG.info(String.format("New connection accepted: %s", client));
@@ -43,7 +43,7 @@ public class EventServiceImpl implements EventService {
   }
 
   @Override
-  public void readEvent(SocketChannel channel, int writingPort, int readingPort) throws IOException {
+  public void readChannel(SocketChannel channel, int writingPort, int readingPort) throws IOException {
     checkConnection(channel);
     buffer.flip();
     int port = channel.socket()

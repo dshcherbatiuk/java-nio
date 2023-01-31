@@ -1,7 +1,7 @@
 package com.nio.tcp;
 
-import com.nio.tcp.service.EventService;
-import com.nio.tcp.service.EventServiceImpl;
+import com.nio.tcp.service.ChannelService;
+import com.nio.tcp.service.ChannelServiceImpl;
 import com.nio.TcpDataFlowExample;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -18,12 +18,12 @@ public class TcpDataFlow {
   private final String hostname;
   private final int writingPort;
   private final int readingPort;
-  private final EventService eventService;
+  private final ChannelService channelService;
   private final Selector selector;
 
   public TcpDataFlow(String hostname, int writingPort, int readingPort) throws IOException {
     this.selector = Selector.open();
-    this.eventService = new EventServiceImpl(selector);
+    this.channelService = new ChannelServiceImpl(selector);
     this.hostname = hostname;
     this.writingPort = writingPort;
     this.readingPort = readingPort;
@@ -51,12 +51,12 @@ public class TcpDataFlow {
       try {
         LOG.info("Handle READ event");
         if (selectionKey.isAcceptable()) {
-          eventService.acceptEvent((ServerSocketChannel) selectionKey.channel());
+          channelService.acceptChannel((ServerSocketChannel) selectionKey.channel());
         }
 
         if (selectionKey.isReadable()) {
           SocketChannel channel = (SocketChannel) selectionKey.channel();
-          eventService.readEvent(channel, writingPort, readingPort);
+          channelService.readChannel(channel, writingPort, readingPort);
         }
         iterator.remove();
       } catch (Exception e) {
