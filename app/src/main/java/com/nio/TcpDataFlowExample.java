@@ -3,6 +3,8 @@ package com.nio;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -12,9 +14,14 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Objects;
+import java.util.Properties;
 
 public final class TcpDataFlowExample {
 
+    private static final String HOSTNAME_PROP = "hostname";
+    private static final String DATA_CHANNEL_PORT_PROP = "data.channel.port";
+    private static final String CONTROL_CHANNEL_PORT_PROP = "control.channel.port";
 	public static final String HOSTNAME = "0.0.0.0";
 	public static final int[] PORTS = new int[] { 5555, 4444 };
 
@@ -22,7 +29,8 @@ public final class TcpDataFlowExample {
 	}
 
 	public static void main(final String... args) throws Exception {
-		System.out.printf("Tcp Data Flow Example started at %s:%s%n", HOSTNAME, Arrays.toString(PORTS));
+        Properties p = readProperties();
+        System.out.printf("Tcp Data Flow Example started at %s:%s%n", Config.HOSTNAME.get(p), Arrays.toString(PORTS));
 		final Selector selector = Selector.open();
 
 		for (final int port : PORTS) {
@@ -114,4 +122,39 @@ public final class TcpDataFlowExample {
 			}
 		});
 	}
+
+    private static Properties readProperties() {
+        try (InputStream is = TcpDataFlowExample.class.getResourceAsStream("application.conf")) {
+            Properties properties = new Properties();
+            if (Objects.isNull(is)) {
+                System.out.println("application.conf is not found. Using defaults");
+            } else {
+                properties.load(is);
+            }
+            return properties;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    enum Config {
+
+        HOSTNAME("hostname", "0.0.0.0"),
+        DATA_CHANNEL_PORT("data.channel.port", "5555"),
+        CONTROL_CHANNEL_PORT("control.channel.port", "4444");
+
+        private final String propertyKey;
+        private final String defaultValue;
+
+        Config(String propertyKey, String defaultValue) {
+            this.propertyKey = propertyKey;
+            this.defaultValue = defaultValue;
+        }
+
+        public String get(Properties properties) {
+            return properties.getProperty(propertyKey, defaultValue);
+        }
+
+    }
+
 }
